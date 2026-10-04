@@ -34,3 +34,10 @@ settings.local.json
 *.njsproj
 *.sln
 *.sw?
+
+# Private fleet runtime never belongs in source control
+**/__pycache__/
+*.pyc
+fleet-node/state/
+fleet-node/runtime/
+fleet-node/secrets/
