@@ -21,6 +21,10 @@ Fresh Web Interface Guidelines review on 4 October 2026:
 
 ## Verification and limits
 
-Frontend verify: 1,504 tests, lint, type checking and single-file build pass. Native distribution: 26 tests pass; canonical bootstrap: 23 pass. Tests cover actual metadata membership, inherited projects, stale unfinished turns, read-only storage, privacy, missing/unsupported schemas, authentication and nested/cyclic agent filtering.
+Frontend verify: 1,505 tests, lint, type checking and single-file build pass. Native distribution: 32 tests pass; canonical bootstrap: 29 pass. Tests cover actual metadata membership, inherited projects, stale unfinished turns, read-only storage, privacy, missing/unsupported schemas, authentication and nested/cyclic agent filtering.
 
 Live normal-Chrome QA checks the actual project list, Attendix search and six child agents, child-to-main links, command disclosure, project-scoped activity, reload and Back navigation, source separation and phone overflow/focus. This is local read-only observation, not a claim to see every remote/cloud chat or route existing app inference. iPhone app deep-link handling requires a device check.
+
+## Read recovery
+
+A temporary record-read failure retains verified projects/chats with their original observation time and an explicit stale notice. Live state becomes unknown; a new prompt is not required. Safe categories distinguish updating metadata, busy databases, unsafe paths and unreadable records. Refresh recovery clears the notice. Without any verified snapshot, the view remains unavailable. Ownership/path failures discard caches. A chat history refresh can retain verified operation evidence and shows a separate retry notice. Cached history is not a live execution claim.

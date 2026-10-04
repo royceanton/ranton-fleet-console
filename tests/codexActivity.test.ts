@@ -52,6 +52,24 @@ test('cyclic agent ancestry is bounded without inventing a main chat', () => {
   expect(visibleChats(status, '', 'all', '')).toEqual([]);
 });
 
+test('a stale Codex snapshot retains named history and its verification time', () => {
+  const status = decodeCodexStatus({
+    available: true,
+    stale: true,
+    errorCode: 'database_busy',
+    observedAt: 42,
+    attemptedAt: 100,
+    projects: [{ id: 'real', name: 'Real project' }],
+    chats: [{ id: 'main', title: 'Past chat', project: 'real', state: 'unknown', updated: 2 }],
+  });
+  expect(status.available).toBe(true);
+  expect(status.stale).toBe(true);
+  expect(status.errorCode).toBe('database_busy');
+  expect(status.observedAt).toBe(42);
+  expect(visibleChats(status, 'real', 'all', '').map((chat) => chat.title)).toEqual(['Past chat']);
+  expect(visibleChats(status, 'real', 'working', '')).toEqual([]);
+});
+
 test('literal Fleet UI labels exist instead of exposing translation keys', async () => {
   const locale = (await import('../src/i18n/locales/en.json')).default;
   for (const file of ['CodexActivity', 'FleetActivityPage', 'TaskInspector', 'FleetControls']) {

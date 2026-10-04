@@ -2410,7 +2410,7 @@
     "codex_connected": "{{projects}} Codex projects · {{working}} working",
     "codex_read_only": "Read-only observation",
     "codex_unavailable": "Codex records unavailable",
-    "codex_unavailable_hint": "Could not read this Mac’s Codex records. Refresh after Codex is running; unsupported storage versions are shown here instead of substituting fleet jobs.",
+    "codex_unavailable_hint": "无法完成本次本地 Codex 记录读取。系统会自动重试，无需发送对话消息。缺失或不支持的存储仍不可用。",
     "codex_connection_error": "Could not refresh Codex activity. Use Refresh All to retry.",
     "codex_detail_error": "Could not load this chat’s activity. Select another chat or refresh to retry.",
     "codex_projects": "Codex 项目",
@@ -2453,6 +2453,15 @@
       "unknown": "状态未知"
     },
     "open_codex_chat": "在 Codex 中打开",
-    "command": "命令详情"
+    "command": "命令详情",
+    "codex_stale": "显示上次验证的 Codex 记录",
+    "codex_stale_hint": "刷新中断。保留历史项目和对话；成功刷新前，实时状态未知。正在自动重试。",
+    "codex_read_errors": {
+      "metadata_updating": "Codex 元数据正在更新。",
+      "database_busy": "Codex 数据库暂时繁忙。",
+      "unsafe_data_path": "Codex 记录的所有者或路径检查失败。",
+      "records_unreadable": "无法读取 Codex 记录，或记录格式已更改。"
+    },
+    "codex_history_retry_hint": "无法刷新操作历史。显示可用的已验证记录；正在自动重试。"
   }
 }

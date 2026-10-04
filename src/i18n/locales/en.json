@@ -2412,7 +2412,7 @@
     "codex_connected": "{{projects}} Codex projects · {{working}} working",
     "codex_read_only": "Read-only observation",
     "codex_unavailable": "Codex records unavailable",
-    "codex_unavailable_hint": "Could not read this Mac’s Codex records. Refresh after Codex is running; unsupported storage versions are shown here instead of substituting fleet jobs.",
+    "codex_unavailable_hint": "The local Codex reader could not complete this refresh. It retries automatically; no chat prompt is needed. Missing or unsupported stores remain unavailable.",
     "codex_connection_error": "Could not refresh Codex activity. Use Refresh All to retry.",
     "codex_detail_error": "Could not load this chat’s activity. Select another chat or refresh to retry.",
     "codex_projects": "Codex projects",
@@ -2455,6 +2455,15 @@
       "unknown": "Status unknown"
     },
     "open_codex_chat": "Open in Codex",
-    "command": "Command details"
+    "command": "Command details",
+    "codex_stale": "Showing last verified Codex records",
+    "codex_stale_hint": "A refresh was interrupted. Past projects and chats are retained; live state is unknown until refresh succeeds. Retrying automatically.",
+    "codex_read_errors": {
+      "metadata_updating": "Codex metadata is being updated.",
+      "database_busy": "The Codex database is temporarily busy.",
+      "unsafe_data_path": "Codex record access failed an ownership or path check.",
+      "records_unreadable": "Codex records could not be read or their format changed."
+    },
+    "codex_history_retry_hint": "Operation history could not refresh. Showing previously verified evidence where available; retrying automatically."
   }
 }

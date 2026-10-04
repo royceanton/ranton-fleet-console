@@ -284,6 +284,8 @@ export interface CodexOperation {
 }
 export interface CodexStatus {
   available: boolean;
+  stale: boolean;
+  errorCode: string;
   observedAt: number;
   reason: string;
   projects: CodexProject[];
@@ -331,6 +333,8 @@ export function decodeCodexStatus(value: unknown): CodexStatus {
   }
   return {
     available: root.available === true,
+    stale: root.stale === true,
+    errorCode: text(root.errorCode),
     observedAt: number(root.observedAt) ?? 0,
     reason: text(root.reason),
     chats: list(root.chats).map(decodeCodexChat),
@@ -356,6 +360,8 @@ export const codexApi = {
       children: list(value.children).map(decodeCodexChat),
       operations: list(value.operations).map(decodeCodexOperation),
       historyAvailable: value.historyAvailable === true,
+      stale: value.stale === true,
+      errorCode: text(value.errorCode),
     };
   },
 };

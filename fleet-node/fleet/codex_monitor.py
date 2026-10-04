@@ -6,8 +6,10 @@ outputs, tool arguments, credentials or account identifiers are exported.
 """
 
 import fcntl
+from copy import deepcopy
 from contextlib import closing
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -19,6 +21,24 @@ import uuid
 from .observability import operation_evidence, redact
 
 
+class UnsafeRecordPath(OSError):
+    pass
+
+
+def read_error_code(error):
+    if isinstance(error, UnsafeRecordPath):
+        return 'unsafe_data_path'
+    if isinstance(error, json.JSONDecodeError):
+        return 'metadata_updating'
+    if isinstance(error, sqlite3.Error):
+        code = getattr(error, 'sqlite_errorcode', None)
+        # Python 3.10 does not expose SQLite error codes on exceptions.
+        if (isinstance(code, int) and code & 255 in (5, 6)) or str(error).lower().startswith(
+                ('database is locked', 'database table is locked', 'database is busy')):
+            return 'database_busy'
+    return 'records_unreadable'
+
+
 def valid_id(value):
     try:
         return isinstance(value, str) and str(uuid.UUID(value)) == value
@@ -28,10 +48,10 @@ def valid_id(value):
 
 def owned_file(path):
     if path.is_symlink() or path.resolve() != path:
-        raise OSError('Unsafe Codex data path')
+        raise UnsafeRecordPath('Unsafe Codex data path')
     info = path.stat()
     if info.st_uid != os.getuid() or not stat.S_ISREG(info.st_mode):
-        raise OSError('Codex data must belong to this user')
+        raise UnsafeRecordPath('Codex data must belong to this user')
     return path
 
 
@@ -39,8 +59,15 @@ def read_json(path):
     owned_file(path)
     if path.stat().st_size > 16 * 1024 * 1024:
         raise ValueError('Codex metadata exceeds the supported size')
-    with path.open() as handle:
-        value = json.load(handle)
+    for attempt in range(3):
+        try:
+            with owned_file(path).open() as handle:
+                value = json.load(handle)
+            break
+        except json.JSONDecodeError:
+            if attempt == 2:
+                raise
+            time.sleep(0.03 * (attempt + 1))
     return value if isinstance(value, dict) else {}
 
 
@@ -163,6 +190,7 @@ class CodexMonitor:
         self.guard = threading.Lock()
         self.cached = None
         self.cached_at = 0
+        self.last_verified = None
 
     def snapshot(self):
         with self.guard:
@@ -170,9 +198,30 @@ class CodexMonitor:
                 return self.cached
             try:
                 result = self._snapshot()
-            except (OSError, sqlite3.Error, ValueError, TypeError, KeyError):
-                result = {'available': False, 'observedAt': time.time(), 'projects': [], 'chats': [],
-                          'reason': 'Codex local records are unavailable or their schema is unsupported'}
+                result.update(stale=False, errorCode='')
+                self.last_verified = result
+            except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as error:
+                code = read_error_code(error)
+                if not self.cached or self.cached.get('errorCode') != code:
+                    # Never log exception text: records and parser errors may contain private data.
+                    logging.getLogger(__name__).warning('Codex observation refresh failed: %s', code)
+                if isinstance(error, UnsafeRecordPath):
+                    self.last_verified = None
+                if self.last_verified is not None:
+                    result = deepcopy(self.last_verified)
+                    result.update(stale=True, errorCode=code, attemptedAt=time.time(),
+                                  reason='Showing last verified Codex records. Live state is unknown until refresh succeeds.')
+                    for chat in result['chats']:
+                        chat['state'] = 'unknown'
+                    for project in result['projects']:
+                        project['workingCount'] = 0
+                    for operation in result.get('operations', []):
+                        if operation['state'] == 'inProgress':
+                            operation['state'] = 'unknown'
+                else:
+                    result = {'available': False, 'stale': False, 'errorCode': code,
+                              'observedAt': time.time(), 'projects': [], 'chats': [], 'operations': [],
+                              'reason': 'Codex local records are unavailable or their schema is unsupported'}
             self.cached, self.cached_at = result, time.time()
             return result
 
@@ -243,11 +292,24 @@ class CodexMonitor:
         chat = next((c for c in snapshot['chats'] if c['id'] == identifier), None)
         if not chat:
             return None
-        operations = []
+        operations = [deepcopy(op) for op in snapshot.get('operations', [])
+                      if op['chat'] == identifier][:60]
+        stale = snapshot.get('stale', False)
+        error_code = snapshot.get('errorCode', '')
         path = self.root / 'thread_history_1.sqlite'
-        if path.exists():
-            with closing(connect(path)) as db:
-                operations = [{**operation(row), 'chat': identifier} for row in operation_rows(db, identifier, 60)]
+        if not stale and path.exists():
+            try:
+                with closing(connect(path)) as db:
+                    operations = [{**operation(row), 'chat': identifier} for row in operation_rows(db, identifier, 60)]
+            except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as error:
+                if isinstance(error, UnsafeRecordPath):
+                    raise
+                stale, error_code = True, read_error_code(error)
+        if stale:
+            for op in operations:
+                if op['state'] == 'inProgress':
+                    op['state'] = 'unknown'
         return {'chat': chat, 'operations': operations,
                 'children': [c for c in snapshot['chats'] if c['parent'] == identifier],
-                'historyAvailable': bool(operations), 'observedAt': time.time()}
+                'historyAvailable': bool(operations), 'observedAt': snapshot['observedAt'] if stale else time.time(),
+                'stale': stale, 'errorCode': error_code}

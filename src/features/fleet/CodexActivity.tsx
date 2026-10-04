@@ -115,8 +115,10 @@ export function CodexActivity() {
   useEffect(() => {
     if (selected) document.getElementById('codex-chat-title')?.focus();
     else if (previousSelection.current)
-      (document.getElementById('codex-chat-' + previousSelection.current) ||
-        document.getElementById('codex-work'))?.focus();
+      (
+        document.getElementById('codex-chat-' + previousSelection.current) ||
+        document.getElementById('codex-work')
+      )?.focus();
     previousSelection.current = selected;
   }, [selected, detail?.chat.id]);
   const change = (values: Record<string, string>, replace = false) => {
@@ -150,6 +152,14 @@ export function CodexActivity() {
       const chat = status.chats.find((c) => c.id === op.chat);
       return chat && (!project || chat.project === project);
     }) || [];
+  const readProblem = status?.errorCode
+    ? t(
+        'fleet.codex_read_errors.' +
+          (['metadata_updating', 'database_busy', 'unsafe_data_path'].includes(status.errorCode)
+            ? status.errorCode
+            : 'records_unreadable')
+      )
+    : '';
   return (
     <div className={styles.page}>
       <button
@@ -169,13 +179,15 @@ export function CodexActivity() {
       </header>
       <div className={styles.statusBar}>
         <span className={styles.health}>
-          <span className={styles.dot} data-live={!!status?.available && !error} />
+          <span className={styles.dot} data-live={!!status?.available && !status.stale && !error} />
           {error ||
             (status?.available
-              ? t('fleet.codex_connected', {
-                  projects: status.projects.length,
-                  working: status.chats.filter((c) => c.state === 'working').length,
-                })
+              ? status.stale
+                ? t('fleet.codex_stale')
+                : t('fleet.codex_connected', {
+                    projects: status.projects.length,
+                    working: status.chats.filter((c) => c.state === 'working').length,
+                  })
               : status
                 ? t('fleet.codex_unavailable')
                 : t('fleet.loading'))}
@@ -189,7 +201,12 @@ export function CodexActivity() {
       )}
       {status && !status.available && (
         <p role="status" className={styles.empty}>
-          {t('fleet.codex_unavailable_hint')}
+          {t('fleet.codex_unavailable_hint')} {readProblem}
+        </p>
+      )}
+      {status?.available && status.stale && (
+        <p role="status" className={styles.hint}>
+          {t('fleet.codex_stale_hint')} {readProblem}
         </p>
       )}
       {!status && !error && (
@@ -393,6 +410,11 @@ export function CodexActivity() {
                   <h3>{t('fleet.latest_operations')}</h3>
                   {detail?.chat.id === selected ? (
                     <>
+                      {detail.stale && !status.stale && (
+                        <p role="status" className={styles.hint}>
+                          {t('fleet.codex_history_retry_hint')}
+                        </p>
+                      )}
                       <OperationList operations={detail.operations.slice(0, 6)} />
                       {detail.operations.length > 6 && (
                         <details>

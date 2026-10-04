@@ -100,4 +100,79 @@ class CodexMonitorTests(unittest.TestCase):
         self.assertFalse(writer_active(self.root,CHAT))
         self.assertFalse((self.root/'thread-writer-locks').exists())
 
+    def test_temporary_metadata_failure_retains_history_without_claiming_live_state(self):
+        with patch('fleet.codex_monitor.writer_active', return_value=True):
+            verified=self.monitor.snapshot()
+        self.monitor.cached_at=0
+        with patch('fleet.codex_monitor.read_json', side_effect=json.JSONDecodeError('Updating','',0)):
+            stale=self.monitor.snapshot()
+        self.assertTrue(stale['available'])
+        self.assertTrue(stale['stale'])
+        self.assertEqual(stale['observedAt'],verified['observedAt'])
+        self.assertEqual(stale['errorCode'],'metadata_updating')
+        self.assertEqual([p['id'] for p in stale['projects']],['real'])
+        self.assertEqual(len(stale['chats']),2)
+        self.assertTrue(all(c['state']=='unknown' for c in stale['chats']))
+        self.assertEqual(stale['projects'][0]['workingCount'],0)
+        self.assertEqual(next(c for c in verified['chats'] if c['id']==CHAT)['state'],'working')
+        self.monitor.cached_at=0
+        recovered=self.monitor.snapshot()
+        self.assertFalse(recovered['stale'])
+        self.assertEqual(recovered['errorCode'],'')
+
+    def test_incomplete_metadata_read_is_retried_on_first_observation(self):
+        metadata=json.loads(self.state.read_text())
+        with patch('fleet.codex_monitor.json.load', side_effect=[json.JSONDecodeError('Updating','',0),metadata]), patch('fleet.codex_monitor.time.sleep'):
+            snapshot=self.monitor.snapshot()
+        self.assertTrue(snapshot['available'])
+        self.assertFalse(snapshot['stale'])
+        self.assertEqual(snapshot['projects'][0]['name'],'Real app project')
+
+    def test_sqlite_write_lock_does_not_erase_verified_projects(self):
+        verified=self.monitor.snapshot()
+        self.monitor.cached_at=0
+        with sqlite3.connect(self.root/'state_5.sqlite') as writer:
+            writer.execute('BEGIN EXCLUSIVE')
+            try:
+                stale=self.monitor.snapshot()
+            finally:
+                writer.rollback()
+        self.assertTrue(stale['available'])
+        self.assertTrue(stale['stale'])
+        self.assertEqual(stale['errorCode'],'database_busy')
+        self.assertEqual(stale['observedAt'],verified['observedAt'])
+        self.assertEqual(len(stale['projects']),1)
+
+    def test_past_completed_chats_are_visible_without_an_active_writer(self):
+        with sqlite3.connect(self.root/'thread_history_1.sqlite') as db:
+            db.execute("UPDATE thread_turns SET status='completed',completed_at=100")
+        with patch('fleet.codex_monitor.writer_active', return_value=False):
+            snapshot=self.monitor.snapshot()
+        self.assertTrue(snapshot['available'])
+        self.assertEqual(next(c for c in snapshot['chats'] if c['id']==CHAT)['state'],'idle')
+        self.assertEqual(snapshot['projects'][0]['chatCount'],1)
+
+    def test_unsafe_path_cannot_reuse_cached_records(self):
+        self.assertTrue(self.monitor.snapshot()['available'])
+        self.monitor.cached_at=0
+        self.state.unlink()
+        self.state.symlink_to('/etc/hosts')
+        snapshot=self.monitor.snapshot()
+        self.assertFalse(snapshot['available'])
+        self.assertEqual(snapshot['errorCode'],'unsafe_data_path')
+        self.assertEqual(snapshot['projects'],[])
+
+    def test_chat_history_write_lock_retains_verified_operation_evidence(self):
+        self.monitor.snapshot()
+        with sqlite3.connect(self.root/'thread_history_1.sqlite') as writer:
+            writer.execute('BEGIN EXCLUSIVE')
+            try:
+                detail=self.monitor.detail(CHAT)
+            finally:
+                writer.rollback()
+        self.assertTrue(detail['stale'])
+        self.assertEqual(detail['errorCode'],'database_busy')
+        self.assertEqual(len(detail['operations']),3)
+        self.assertNotIn('DO_NOT_EXPORT',json.dumps(detail))
+
 if __name__=='__main__':unittest.main()

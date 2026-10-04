@@ -2406,7 +2406,7 @@
     "codex_connected": "{{projects}} Codex projects · {{working}} working",
     "codex_read_only": "Read-only observation",
     "codex_unavailable": "Codex records unavailable",
-    "codex_unavailable_hint": "Could not read this Mac’s Codex records. Refresh after Codex is running; unsupported storage versions are shown here instead of substituting fleet jobs.",
+    "codex_unavailable_hint": "Не удалось завершить чтение локальных записей Codex. Повтор выполняется автоматически; отправлять сообщение в чат не нужно. Отсутствующие или неподдерживаемые хранилища недоступны.",
     "codex_connection_error": "Could not refresh Codex activity. Use Refresh All to retry.",
     "codex_detail_error": "Could not load this chat’s activity. Select another chat or refresh to retry.",
     "codex_projects": "Проекты Codex",
@@ -2449,6 +2449,15 @@
       "unknown": "Статус неизвестен"
     },
     "open_codex_chat": "Открыть в Codex",
-    "command": "Подробности команды"
+    "command": "Подробности команды",
+    "codex_stale": "Показаны последние проверенные записи Codex",
+    "codex_stale_hint": "Обновление прервано. Прошлые проекты и чаты сохранены; текущее состояние неизвестно до успешного обновления. Повторяем автоматически.",
+    "codex_read_errors": {
+      "metadata_updating": "Метаданные Codex обновляются.",
+      "database_busy": "База данных Codex временно занята.",
+      "unsafe_data_path": "Проверка владельца или пути записей Codex не пройдена.",
+      "records_unreadable": "Не удалось прочитать записи Codex или их формат изменился."
+    },
+    "codex_history_retry_hint": "Не удалось обновить историю операций. Где возможно, показаны ранее проверенные записи; повторяем автоматически."
   }
 }
