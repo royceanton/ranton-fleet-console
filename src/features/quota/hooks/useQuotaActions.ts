@@ -15,6 +15,7 @@ import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { enrichQuotaInBackground } from '../quotaEnrichment';
+import { preserveCodexObservation } from '../codexLedgerModel';
 import { getQuotaMap, getQuotaSetter, type QuotaAdapter, type QuotaCardState } from '../providers';
 
 const getQuotaState = (adapter: QuotaAdapter, file: AuthFileItem): QuotaCardState | undefined =>
@@ -37,7 +38,10 @@ export function useQuotaActions(disableControls: boolean) {
 
       setQuota((prev) => ({
         ...prev,
-        [cacheKey]: adapter.buildLoadingState(),
+        [cacheKey]:
+          adapter.type === 'codex'
+            ? preserveCodexObservation(prev[cacheKey], adapter.buildLoadingState())
+            : adapter.buildLoadingState(),
       }));
 
       try {
@@ -57,7 +61,10 @@ export function useQuotaActions(disableControls: boolean) {
         commitIfQuotaCacheCurrent(cacheGeneration, () => {
           setQuota((prev) => ({
             ...prev,
-            [cacheKey]: adapter.buildErrorState(message, status),
+            [cacheKey]:
+              adapter.type === 'codex'
+                ? preserveCodexObservation(prev[cacheKey], adapter.buildErrorState(message, status))
+                : adapter.buildErrorState(message, status),
           }));
           showNotification(
             t('auth_files.quota_refresh_failed', { name: file.name, message }),

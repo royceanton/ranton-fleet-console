@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +27,9 @@ import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
 import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
+import { CodexLedger, CodexQuotaSummary } from './components/CodexLedger';
+import { accountLabel } from './codexLedgerModel';
+import { useQuotaRouting } from './hooks/useQuotaRouting';
 import {
   CARD_ENTRANCE_BUDGET_MS,
   QUOTA_PAGE_SIZE,
@@ -60,8 +64,6 @@ const SKELETON_CARD_COUNT = 6;
  * Existing providers display filenames; Devin's card and timeline share an
  * identity-aware display label. Keep the filename fallback stable for memoization.
  */
-const displayNameFor = (name: string) => name;
-
 export function QuotaPage() {
   const { t } = useTranslation();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
@@ -81,6 +83,17 @@ export function QuotaPage() {
   const revealRef = useRevealGroup<HTMLDivElement>();
 
   const disableControls = connectionStatus !== 'connected';
+  const [params, setParams] = useSearchParams();
+  const ledgerView = params.get('view') !== 'cards';
+  const selectedDetails = params.get('details') || '';
+  const changeView = (values: Record<string, string>) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setParams(next);
+  };
 
   /* ---------- 文件列表 ---------- */
 
@@ -162,10 +175,24 @@ export function QuotaPage() {
   const sortNow = sortMode === 'default' ? 0 : tick;
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
+  const codexEntries = useMemo(() => entries.filter((entry) => entry.type === 'codex'), [entries]);
+  const routing = useQuotaRouting(codexEntries.length > 0);
+  const bindings = routing?.accountBindings;
+  const labels = useMemo(() => ({ accountBindings: bindings ?? [] }), [bindings]);
+  const displayNameFor = useCallback(
+    (name: string) => {
+      const file = files.find((file) => file.name === name);
+      return file ? accountLabel(file, labels) : name;
+    },
+    [files, labels]
+  );
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
   const filteredEntries = useMemo(
-    () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
-    [entries, tab, search]
+    () =>
+      filterEntriesBySearch(filterEntriesByTab(entries, tab), search, (file) =>
+        displayNameFor(file.name)
+      ),
+    [entries, tab, search, displayNameFor]
   );
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -289,6 +316,37 @@ export function QuotaPage() {
   );
 
   const canUseActions = !disableControls && !loading && filesGeneration === sessionGeneration;
+  const visibleCodexRef = useRef<QuotaFileEntry[]>([]);
+  // Observe only visible Codex accounts, at a bounded cadence, while the tab is visible.
+  // Reuse the existing generation/in-flight guards; other providers keep upstream behavior.
+  useEffect(() => {
+    if (!canUseActions || error) return;
+    const targets = pageItems.filter((entry) => entry.type === 'codex');
+    visibleCodexRef.current = targets;
+    if (!targets.length) return;
+    const idle = targets.filter(
+      ({ file }) => !useQuotaStore.getState().codexQuota[getQuotaCacheKey(file)]
+    );
+    if (idle.length && !document.hidden) void loadQuota(idle);
+  }, [canUseActions, error, loadQuota, pageItems, sessionGeneration]);
+
+  useEffect(() => {
+    if (!canUseActions || error) return;
+    const refresh = () => {
+      if (document.hidden) return;
+      const due = visibleCodexRef.current.filter(({ file }) => {
+        const at = useQuotaStore.getState().codexQuota[getQuotaCacheKey(file)]?.observedAtMs;
+        return !at || Date.now() - at >= 90_000;
+      });
+      if (due.length) void loadQuota(due);
+    };
+    const interval = window.setInterval(refresh, 90_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [canUseActions, error, loadQuota, sessionGeneration]);
 
   /* ---------- 首屏卡片一次性级联入场 ----------
    * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过自己的
@@ -324,10 +382,13 @@ export function QuotaPage() {
       />
 
       <section className={styles.workbench}>
+        {!loading && codexEntries.length > 0 && (tab === 'all' || tab === 'codex') && (
+          <CodexQuotaSummary entries={codexEntries} quotas={codexQuota} routing={routing} />
+        )}
         {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
         <div className={styles.tabsRow} data-reveal>
           <ProviderTabs
-            types={TAB_IDS}
+            types={TAB_IDS.filter((type) => type === 'all' || type === tab || tabCounts[type] > 0)}
             counts={tabCounts}
             active={tab}
             resolvedTheme={resolvedTheme}
@@ -346,6 +407,9 @@ export function QuotaPage() {
               onChange={(event) => handleSearchChange(event.target.value)}
               placeholder={t('quota_management.search_placeholder')}
               aria-label={t('quota_management.search_label')}
+              name="quota-search"
+              autoComplete="off"
+              spellCheck={false}
             />
             {search && (
               <button
@@ -362,14 +426,32 @@ export function QuotaPage() {
               </button>
             )}
           </div>
-          <div className={styles.sort}>
-            <Select
-              value={sortMode}
-              options={sortOptions}
-              onChange={handleSortModeChange}
-              ariaLabel={t('quota_management.sort_label')}
-              size="sm"
-            />
+          <div className={styles.viewControls}>
+            <div className={styles.viewToggle} role="group" aria-label={t('quota_ledger.view')}>
+              <button
+                type="button"
+                aria-pressed={ledgerView}
+                onClick={() => changeView({ view: '', details: '' })}
+              >
+                {t('quota_ledger.ledger')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={!ledgerView}
+                onClick={() => changeView({ view: 'cards', details: '' })}
+              >
+                {t('quota_ledger.cards')}
+              </button>
+            </div>
+            <div className={styles.sort}>
+              <Select
+                value={sortMode}
+                options={sortOptions}
+                onChange={handleSortModeChange}
+                ariaLabel={t('quota_management.sort_label')}
+                size="sm"
+              />
+            </div>
           </div>
         </div>
 
@@ -414,21 +496,39 @@ export function QuotaPage() {
             }
           />
         ) : (
-          <div className={styles.grid}>
-            {pageItems.map((entry, index) => (
-              <QuotaCard
-                key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
-                entry={entry}
-                quota={getQuota(entry)}
+          <>
+            {ledgerView && pageItems.some((entry) => entry.type === 'codex') && (
+              <CodexLedger
+                entries={pageItems.filter((entry) => entry.type === 'codex')}
+                quotas={codexQuota}
+                routing={routing}
+                selected={selectedDetails}
+                onSelect={(details) => changeView({ details })}
+                canRefresh={canUseActions}
+                resetting={resettingQuotaName}
                 resolvedTheme={resolvedTheme}
-                canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
-                entranceDelayMs={cardEntranceDelay(index)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                onRefresh={(entry) => void refreshQuota(entry.file, QUOTA_ADAPTERS.codex)}
+                onReset={(entry) => resetQuota(entry.file, QUOTA_ADAPTERS.codex)}
               />
-            ))}
-          </div>
+            )}
+            <div className={styles.grid}>
+              {pageItems
+                .filter((entry) => !ledgerView || entry.type !== 'codex')
+                .map((entry, index) => (
+                  <QuotaCard
+                    key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
+                    entry={entry}
+                    quota={getQuota(entry)}
+                    resolvedTheme={resolvedTheme}
+                    canRefresh={canUseActions && !entry.file.disabled}
+                    resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+                    entranceDelayMs={cardEntranceDelay(index)}
+                    onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                    onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                  />
+                ))}
+            </div>
+          </>
         )}
 
         {!loading && filteredEntries.length > QUOTA_PAGE_SIZE && (

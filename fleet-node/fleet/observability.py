@@ -57,6 +57,33 @@ def routing_choices(fleet, now=None):
     return sorted(candidates, key=lambda entry: (not entry['eligible'], entry['reset'] or float('inf'), entry['account']))
 
 
+def public_account_bindings(fleet):
+    """Export only verified worker aliases and existing public credential indices."""
+    path = fleet.runtime / 'gateway-accounts.json'
+    try:
+        from .worker import sessions
+        sessions.accounts.reject_symlinks(path)
+        metadata = path.stat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+            return []
+        bindings = json.loads(path.read_text())
+        if not isinstance(bindings, dict):
+            return []
+    except (OSError, ValueError, RuntimeError):
+        return []
+    observations = fleet.store.observations()
+    result = []
+    for alias in ('harith', 'jill'):
+        binding = bindings.get(alias)
+        expected = observations.get(alias, {}).get('identityFingerprint')
+        if not isinstance(binding, dict) or not expected or binding.get('identityFingerprint') != expected:
+            continue
+        index = binding.get('authIndex')
+        if isinstance(index, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,128}', index):
+            result.append({'account': alias, 'authIndex': index})
+    return result
+
+
 def gateway_pick(fleet, data, now=None):
     """Only the plugin's filtered, available Codex candidates can be selected.
 
@@ -143,6 +170,7 @@ def public_observation(fleet):
     status['operations'] = fleet.store.operations()
     status['routing'] = {'strategy': 'earliest-reset', 'affinity': 'Persistent account and session',
                          'freshnessSeconds': 300, 'choices': routing_choices(fleet),
+                         'accountBindings': public_account_bindings(fleet),
                          'gatewayConfigured': (fleet.runtime / 'gateway-accounts.json').is_file()}
     status['coverage'] = 'Fleet-managed tasks and CLIProxyAPI gateway traffic. Command output and unrelated Mac activity are not recorded.'
     return status

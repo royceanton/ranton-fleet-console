@@ -67,11 +67,15 @@ export function filterEntriesByTab(entries: QuotaFileEntry[], tab: QuotaTabId): 
 }
 
 /** Search public account identifiers only; account may contain an API key. */
-export function filterEntriesBySearch(entries: QuotaFileEntry[], search: string): QuotaFileEntry[] {
+export function filterEntriesBySearch(
+  entries: QuotaFileEntry[],
+  search: string,
+  displayNameFor?: (file: AuthFileItem) => string
+): QuotaFileEntry[] {
   const query = search.trim().toLowerCase();
   if (!query) return entries;
   return entries.filter(({ file }) =>
-    [file.name, file.email].some(
+    [file.name, file.email, displayNameFor?.(file)].some(
       (value) => typeof value === 'string' && value.toLowerCase().includes(query)
     )
   );

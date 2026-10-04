@@ -5,7 +5,7 @@ import threading
 import unittest
 from types import SimpleNamespace
 
-from fleet.observability import gateway_event, gateway_pick, operation_evidence, redact
+from fleet.observability import gateway_event, gateway_pick, operation_evidence, redact, public_account_bindings
 from fleet.store import Store
 from test_fleet import NOW, observation
 
@@ -35,6 +35,23 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.pick()['auth_id'], 'harith-id')
         self.assertEqual(self.pick(session='child', parent='one')['auth_id'], 'harith-id')
         self.assertEqual(self.pick(scope='other-client')['auth_id'], 'jill-id')
+
+    def test_public_bindings_only_export_verified_indices(self):
+        bindings = json.loads(self.binding.read_text())
+        bindings['harith']['authIndex'] = 'harith-index'
+        bindings['jill'].update(authIndex='jill-index', identityFingerprint='wrong')
+        self.binding.write_text(json.dumps(bindings))
+        result = public_account_bindings(self.fleet)
+        self.assertEqual(result, [{'account': 'harith', 'authIndex': 'harith-index'}])
+        self.assertNotIn('identityFingerprint', json.dumps(result))
+        self.assertNotIn('harith-id', json.dumps(result))
+
+    def test_public_bindings_reject_unsafe_file(self):
+        self.binding.chmod(0o644)
+        self.assertEqual(public_account_bindings(self.fleet), [])
+        self.binding.unlink()
+        self.binding.symlink_to(self.fleet.runtime/'state.sqlite')
+        self.assertEqual(public_account_bindings(self.fleet), [])
 
     def test_bound_account_cannot_fail_over_after_quota_or_candidate_loss(self):
         self.pick()

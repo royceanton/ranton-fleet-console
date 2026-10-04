@@ -16,6 +16,7 @@ import { getQuotaCacheKey } from '@/utils/quota/identity';
 import type { QuotaFileEntry } from '../logic';
 import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from '../providers';
 import { enrichQuotaInBackground } from '../quotaEnrichment';
+import { preserveCodexObservation } from '../codexLedgerModel';
 import type { QuotaProviderType } from '../providers/types';
 
 interface BatchFetchResult {
@@ -59,7 +60,10 @@ export function useQuotaBatchLoader() {
               setQuota((prev) => {
                 const nextState = { ...prev };
                 entries.forEach(({ file }) => {
-                  nextState[getQuotaCacheKey(file)] = adapter.buildLoadingState();
+                  const key = getQuotaCacheKey(file);
+                  const pending = adapter.buildLoadingState();
+                  nextState[key] =
+                    type === 'codex' ? preserveCodexObservation(prev[key], pending) : pending;
                 });
                 return nextState;
               });
@@ -93,13 +97,17 @@ export function useQuotaBatchLoader() {
                 commitIfQuotaCacheCurrent(
                   cacheGeneration,
                   () => {
-                    nextState[result.cacheKey] =
+                    const updated =
                       result.status === 'success'
                         ? adapter.buildSuccessState(result.data)
                         : adapter.buildErrorState(
                             result.error || t('common.unknown_error'),
                             result.errorStatus
                           );
+                    nextState[result.cacheKey] =
+                      type === 'codex'
+                        ? preserveCodexObservation(prev[result.cacheKey], updated)
+                        : updated;
                     committedStates.set(result.cacheKey, nextState[result.cacheKey]);
                   },
                   result.name

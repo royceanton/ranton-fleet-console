@@ -80,6 +80,7 @@ export interface FleetStatus {
   operations: Operation[];
   events: Event[];
   choices: Choice[];
+  accountBindings: { account: string; authIndex: string }[];
   gatewayConfigured: boolean;
   gatewayRequests: number | null;
   gatewaySuccess: number | null;
@@ -205,6 +206,14 @@ export function decodeStatus(value: unknown): FleetStatus {
         reason: text(entry.reason),
         reset: number(entry.reset),
       };
+    }),
+    accountBindings: list(routing.accountBindings).flatMap((value) => {
+      const entry = object(value);
+      const account = text(entry.account);
+      const authIndex = text(entry.authIndex);
+      return (account === 'harith' || account === 'jill') && authIndex
+        ? [{ account, authIndex }]
+        : [];
     }),
   };
 }
