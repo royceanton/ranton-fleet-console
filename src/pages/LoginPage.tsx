@@ -1,3 +1,4 @@
+import { returnLocation } from '@/router/returnLocation';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +19,6 @@ import styles from './LoginPage.module.scss';
 /**
  * 将 API 错误转换为本地化的用户友好消息
  */
-type RedirectState = { from?: { pathname?: string } };
 
 function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof LegacyBackendError) return t('login.error_legacy_backend');
@@ -134,7 +134,7 @@ export function LoginPage() {
           setAutoLoginSuccess(true);
           // 延迟跳转，让用户看到成功动画
           setTimeout(() => {
-            const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
+            const redirect = returnLocation(location.state);
             navigate(redirect, { replace: true });
           }, 1500);
         } else {
@@ -168,7 +168,7 @@ export function LoginPage() {
         rememberPassword,
       });
       showNotification(t('common.connected_status'), 'success');
-      navigate('/', { replace: true });
+      navigate(returnLocation(location.state), { replace: true });
     } catch (err: unknown) {
       const message = getLocalizedErrorMessage(err, t);
       setError(message);
@@ -180,6 +180,7 @@ export function LoginPage() {
     apiBase,
     detectedBase,
     login,
+    location.state,
     managementKey,
     navigate,
     rememberPassword,
@@ -198,7 +199,7 @@ export function LoginPage() {
   );
 
   if (isAuthenticated && !autoLoading && !autoLoginSuccess) {
-    const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
+    const redirect = returnLocation(location.state);
     return <Navigate to={redirect} replace />;
   }
 

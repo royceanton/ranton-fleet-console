@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import urllib.error
@@ -39,6 +40,7 @@ def main():
     project.add_argument("path")
     project.add_argument("--name")
     project.add_argument("--allow-edits", action="store_true")
+    project.add_argument('--chat-title', help='Associate this project with the current Codex control chat')
     task = commands.add_parser("submit")
     task.add_argument("project")
     task.add_argument("title")
@@ -48,6 +50,8 @@ def main():
     task.add_argument("--timeout", type=int, default=1200)
     task.add_argument("--idempotency")
     task.add_argument("--model")
+    task.add_argument('--chat-title', help='Title of the current Codex control chat; defaults to project association')
+    task.add_argument('--parent-task', help='Related task in the same project; does not share its worker session')
     inspect = commands.add_parser("task")
     inspect.add_argument("id")
     action = commands.add_parser("action")
@@ -64,11 +68,14 @@ def main():
     elif args.command == "refresh":
         result = request("/api/refresh", {})
     elif args.command == "project":
-        result = request("/api/projects", {"path": str(Path(args.path).expanduser()), "name": args.name, "writable": args.allow_edits})
+        origin = {'origin_chat_id': os.environ.get('CODEX_THREAD_ID'), 'origin_chat_title': args.chat_title} if args.chat_title else {}
+        result = request("/api/projects", {"path": str(Path(args.path).expanduser()), "name": args.name, "writable": args.allow_edits, **origin})
     elif args.command == "submit":
         goal = Path(args.goal_file).read_text() if args.goal_file else sys.stdin.read()
+        origin = {'origin_chat_id': os.environ.get('CODEX_THREAD_ID'), 'origin_chat_title': args.chat_title} if args.chat_title else {}
         result = request("/api/tasks", {"project": args.project, "title": args.title, "goal": goal, "mode": args.mode,
-                                       "priority": args.priority, "timeout": args.timeout, "idempotency": args.idempotency, "model": args.model})
+                                       "priority": args.priority, "timeout": args.timeout, "idempotency": args.idempotency, "model": args.model,
+                                       'parent_task': args.parent_task, **origin})
         result = {key: result[key] for key in ("id", "title", "state")}
     elif args.command == "task":
         result = next((t for t in request("/api/status")["tasks"] if t["id"] == args.id), None)

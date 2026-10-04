@@ -17,6 +17,8 @@ export interface Project {
   name: string;
   path: string;
   writable: boolean;
+  originChatId: string;
+  originChatTitle: string;
 }
 export interface Task {
   id: string;
@@ -34,6 +36,10 @@ export interface Task {
   goal: string;
   result: string;
   usage: string;
+  mode: string;
+  originChatId: string;
+  originChatTitle: string;
+  parentTask: string;
 }
 export interface Operation {
   task: string;
@@ -107,6 +113,10 @@ export const decodeTask = (value: unknown): Task => {
     goal: text(entry.goal),
     result: text(entry.result),
     usage: text(entry.usage),
+    mode: text(entry.mode),
+    originChatId: text(entry.origin_chat_id),
+    originChatTitle: text(entry.origin_chat_title),
+    parentTask: text(entry.parent_task),
   };
 };
 export const decodeOperation = (value: unknown): Operation => {
@@ -171,6 +181,8 @@ export function decodeStatus(value: unknown): FleetStatus {
         name: text(entry.name),
         path: text(entry.path),
         writable: entry.writable === 1 || entry.writable === true,
+        originChatId: text(entry.origin_chat_id),
+        originChatTitle: text(entry.origin_chat_title),
       };
     }),
     tasks: list(root.tasks).map(decodeTask),
@@ -238,3 +250,112 @@ export function orderTasks(tasks: Task[]): Task[] {
     (a, b) => (ranks[a.state] ?? 7) - (ranks[b.state] ?? 7) || b.updated - a.updated
   );
 }
+
+export interface CodexProject {
+  id: string;
+  name: string;
+  path: string;
+  chatCount: number;
+  workingCount: number;
+}
+export interface CodexChat {
+  id: string;
+  title: string;
+  project: string;
+  parent: string;
+  state: string;
+  savedState: string;
+  model: string;
+  workspace: string;
+  branch: string;
+  updated: number;
+  turnStarted: number | null;
+  turnFinished: number | null;
+}
+export interface CodexOperation {
+  id: string;
+  chat: string;
+  kind: string;
+  label: string;
+  command: string;
+  state: string;
+  exitCode: number | null;
+  at: number;
+}
+export interface CodexStatus {
+  available: boolean;
+  observedAt: number;
+  reason: string;
+  projects: CodexProject[];
+  chats: CodexChat[];
+  operations: CodexOperation[];
+}
+const decodeCodexChat = (value: unknown): CodexChat => {
+  const item = object(value);
+  return {
+    id: text(item.id),
+    title: text(item.title),
+    project: text(item.project),
+    parent: text(item.parent),
+    state: text(item.state),
+    savedState: text(item.savedState),
+    model: text(item.model),
+    workspace: text(item.workspace),
+    branch: text(item.branch),
+    updated: number(item.updated) ?? 0,
+    turnStarted: number(item.turnStarted),
+    turnFinished: number(item.turnFinished),
+  };
+};
+const decodeCodexOperation = (value: unknown): CodexOperation => {
+  const item = object(value);
+  return {
+    id: text(item.id),
+    chat: text(item.chat),
+    kind: text(item.kind),
+    label: text(item.label),
+    command: text(item.command),
+    state: text(item.state),
+    exitCode: number(item.exitCode),
+    at: number(item.at) ?? 0,
+  };
+};
+export function decodeCodexStatus(value: unknown): CodexStatus {
+  const root = object(value);
+  if (
+    typeof root.available !== 'boolean' ||
+    !Array.isArray(root.chats) ||
+    !Array.isArray(root.projects)
+  ) {
+    throw new Error('Codex observation returned an incompatible response');
+  }
+  return {
+    available: root.available === true,
+    observedAt: number(root.observedAt) ?? 0,
+    reason: text(root.reason),
+    chats: list(root.chats).map(decodeCodexChat),
+    operations: list(root.operations).map(decodeCodexOperation),
+    projects: list(root.projects).map((value) => {
+      const item = object(value);
+      return {
+        id: text(item.id),
+        name: text(item.name),
+        path: text(item.path),
+        chatCount: number(item.chatCount) ?? 0,
+        workingCount: number(item.workingCount) ?? 0,
+      };
+    }),
+  };
+}
+export const codexApi = {
+  status: async () => decodeCodexStatus(await apiClient.get('/fleet/codex')),
+  detail: async (id: string) => {
+    const value = object(await apiClient.get('/fleet/codex/chats/' + encodeURIComponent(id)));
+    return {
+      chat: decodeCodexChat(value.chat),
+      children: list(value.children).map(decodeCodexChat),
+      operations: list(value.operations).map(decodeCodexOperation),
+      historyAvailable: value.historyAvailable === true,
+    };
+  },
+};

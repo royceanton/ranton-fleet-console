@@ -176,7 +176,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith(prefix + '/'):
             suffix = path[len(prefix):]
-            if self.command == 'GET' and suffix.startswith('/tasks/') and len(suffix.split('/')) == 3:
+            if self.command == 'GET' and (suffix == '/codex' or
+                    (suffix.startswith('/codex/chats/') and len(suffix.split('/')) == 4)):
+                target = '/api' + suffix
+            elif self.command == 'GET' and suffix.startswith('/tasks/') and len(suffix.split('/')) == 3:
                 target = '/api/task/' + suffix.split('/')[-1]
             elif self.command == 'POST' and (suffix in ('/tasks', '/projects', '/dispatch', '/refresh', '/policy') or
                     (len(suffix.split('/')) == 4 and suffix.startswith('/tasks/') and suffix.split('/')[-1] in ('pause', 'resume', 'complete', 'followup'))):

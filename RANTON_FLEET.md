@@ -12,7 +12,8 @@ Audit baselines: CPAMC `ee79a794526a30c03748a8864a9ac6589a31833b`; CLIProxyAPI `
 | Session affinity and parent/subagent affinity | Existing gateway support; normal affinity permits failover | Durable coordinator bindings; unavailable bound accounts wait |
 | Scheduler extension interface | Native C ABI and scheduler capability | Small macOS plugin, using the packaged gateway |
 | Repository task queue and native agent supervision | Outside CPAMC's management role | Persistent queue, bounded workers and isolated Git worktrees |
-| Agent threads, commands, file operations and review | No shared repository-task journal in the audited management UI | Fleet Activity overview, threads, operations and routing views |
+| Actual Codex projects, chats and agent relationships | No local Codex app observation in the audited UI | Read-only Codex view using actual metadata, with command/tool lifecycle evidence |
+| Submitted repository jobs and review | No shared repository-task journal | Separate Fleet jobs view with automatic routing, task provenance and focused results |
 | Reset-aware, task-level quota admission | Stock selectors do not implement this fleet policy | One coordinator checks all reported windows, freshness, health and account occupancy |
 | Cross-account computation-cache transfer | Not established | Never claimed or attempted |
 
@@ -24,7 +25,7 @@ The intended experience comes from [Theo's video](https://www.youtube.com/watch?
 
 The owner explicitly requested autonomous self-grilling while away. These decisions resolve the main design questions without an interactive interview:
 
-1. **What does “threads” mean?** Fleet-managed native Codex sessions and tasks. The console does not enumerate arbitrary Mac processes or unrelated Codex app conversations. “Threats” was interpreted as “threads”; this is not a security-threat detector.
+1. **What does “threads” mean?** The user clarified that the default view must observe their actual Codex projects and conversations. Codex observation uses real local metadata; fleet-managed tasks remain a separate Fleet jobs source. Other apps and arbitrary Mac processes are outside this version. “Threats” was interpreted as “threads”; this is not a security-threat detector.
 2. **Who owns routing?** The persistent coordinator. The UI configures and explains policy; the gateway plugin submits filtered, available credential candidates. There is no second independent quota algorithm.
 3. **What is an eligible account?** A verified identity, fresh observations (at most five minutes), healthy authentication, no active native task on that account, and every reported quota window above the configured reserve. Missing quota data blocks admission. Gateway model entitlement is filtered upstream before scheduling.
 4. **Which allowance is used?** Independent new sessions/tasks prefer the eligible account with the earliest reset. Task priority governs queue order. Existing sessions retain their account, model and workspace. A depleted or unavailable bound account pauses rather than silently switching.
@@ -51,7 +52,7 @@ On the initial Mac:
 - Both are private Tailscale Serve routes. Funnel is disabled. The pre-existing port 443 route is preserved.
 - Use the existing proxy management key for the console. Use the distinct client key for inference. Neither key is included in this repository.
 - Each gateway conversation must send a **stable `session_id` header on every request**. Clients must reuse it across tool turns. Requests without it fail with HTTP 503. New conversation, new ID. The plugin does not infer conversation identity from prompt content.
-- Tasks submitted in Fleet Activity use native Codex profiles. Ordinary Codex app chats are not automatically redirected through this proxy.
+- Tasks submitted under Fleet jobs use native Codex profiles. Ordinary Codex app chats are not automatically redirected through this proxy.
 
 `gateway-accounts.json` is generated outside Git only after comparing proxy account-ID hashes to the native profile identities. It contains routing identifiers and fingerprints, never OAuth tokens. Bindings and task state are in the private coordinator SQLite database.
 
@@ -69,6 +70,12 @@ python3 -m unittest discover -s tests -v
 ```
 
 The native plugin builds with Apple Clang and Foundation; installing Go or replacing the Homebrew gateway is unnecessary. Keep the upstream MIT license and rebase upstream updates onto this fork. `fleet-node/` contains the complete native coordinator source, service helpers and tests, without credentials or runtime data.
+
+## Read-only Codex connector
+
+The observed source reads the desktop project/sidebar metadata, `state_5.sqlite` and `thread_history_1.sqlite` using explicit projections and read-only connections. Membership uses real IDs and root paths; agent children inherit an ancestor project where necessary. No prompt previews, messages, reasoning, outputs, tool arguments, credentials or account IDs are exported. Working requires a saved unfinished turn plus an active writer. Unsupported schema or missing history stays unknown/unavailable; setup jobs are never fallback data.
+
+This internal local contract was inspected with Codex CLI 0.160.0. It is version dependent and must be rechecked on updates. The supported app-server thread/turn/item APIs were reviewed, but no attachable read-only endpoint for the existing app process was available on this Mac. Starting a separate process would not establish authoritative status for the existing process, so the connector does not do that. [Official app-server documentation](https://learn.chatgpt.com/docs/app-server) describes those APIs. Remote/cloud hosts and other apps are not covered.
 
 ## Current limits
 

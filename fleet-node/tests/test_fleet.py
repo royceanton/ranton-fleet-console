@@ -135,6 +135,20 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertIn("HttpOnly",headers["Set-Cookie"]);self.assertIn("SameSite=Strict",headers["Set-Cookie"])
         self.assertEqual(self.call("/api/login",{"key":pair["code"]},browser)[0],401)
 
+    def test_codex_observation_is_authenticated_and_never_substitutes_queue_data(self):
+        from fleet.codex_monitor import CodexMonitor
+        self.fleet.codex_monitor = CodexMonitor(self.path / 'absent-codex-data')
+        self.assertEqual(self.call('/api/codex')[0], 401)
+        self.assertEqual(self.call('/api/codex/chats/11111111-2222-4333-8444-555555555555')[0], 401)
+        bearer = {'Authorization': 'Bearer ' + self.fleet.key}
+        status, payload, _ = self.call('/api/codex', headers=bearer)
+        self.assertEqual(status, 200)
+        self.assertFalse(payload['available'])
+        self.assertEqual(payload['projects'], [])
+        self.assertNotIn('Fleet bootstrap', json.dumps(payload))
+        self.assertEqual(self.call('/api/codex/chats/not-a-chat', headers=bearer)[0], 400)
+        self.assertEqual(self.call('/api/codex/chats/11111111-2222-4333-8444-555555555555', headers=bearer)[0], 404)
+
     def test_restart_requires_explicit_resume(self):
         project=self.fleet.store.projects()[0]
         task=self.fleet.submit({"project":project["id"],"title":"Interrupted","goal":"Read docs"})
@@ -145,6 +159,38 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(restored.store.task(task["id"])["state"],"needs_input")
             self.assertEqual(restored.store.task(task["id"])["account"],"harith")
         finally:restored.close()
+
+    def test_task_origin_inheritance_validation_and_restart(self):
+        chat = '11111111-2222-4333-8444-555555555555'
+        project = self.fleet.store.projects()[0]
+        self.fleet.store.add_project(project['name'], project['path'], False, False, chat, 'Control chat')
+        bearer = {'Authorization': 'Bearer ' + self.fleet.key}
+        data = {'project': project['id'], 'title': 'Linked task', 'goal': 'Inspect project'}
+        status, parent, _ = self.call('/api/tasks', data, bearer)
+        self.assertEqual(status, 200)
+        self.assertEqual(parent['origin_chat_id'], chat)
+        self.assertEqual(parent['origin_chat_title'], 'Control chat')
+        status, child, _ = self.call('/api/tasks', {**data, 'parent_task': parent['id']}, bearer)
+        self.assertEqual(status, 200)
+        self.assertEqual(child['origin_chat_id'], chat)
+        self.assertEqual(child['parent_task'], parent['id'])
+        # Association is provenance, never an inherited provider session or account.
+        self.assertIsNone(child['session']); self.assertIsNone(child['account'])
+        other = self.fleet.store.add_project('Other', str(self.path / 'other'), False, False)
+        for bad in ({'origin_chat_id': 'javascript:alert(1)', 'origin_chat_title': 'Bad'},
+                    {'origin_chat_id': '11111111-2222-4333-8444-555555555556'},
+                    {'parent_task': 'missing'}, {'project': other['id'], 'parent_task': parent['id']}):
+            self.assertEqual(self.call('/api/tasks', {**data, **bad}, bearer)[0], 400)
+        recovered = Store(self.path / 'runtime' / 'fleet.sqlite3')
+        self.assertEqual(recovered.task(child['id'])['parent_task'], parent['id'])
+        self.assertEqual(recovered.projects()[0]['origin_chat_id'], chat)
+        self.assertEqual(len(recovered.tasks()), 2)
+
+    def test_standalone_task_does_not_invent_a_control_chat(self):
+        project = self.fleet.store.projects()[0]
+        task = self.fleet.submit({'project': project['id'], 'title': 'Standalone', 'goal': 'Read'})
+        self.assertIsNone(task['origin_chat_id'])
+        self.assertIsNone(task['parent_task'])
 
 
 if __name__=="__main__":unittest.main()

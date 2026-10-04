@@ -23,6 +23,8 @@ cd ..
 python3 fleet-node/install.py --coordinator-root /absolute/path/to/agent-fleet-bootstrap
 ```
 
+The installer does not copy or upgrade coordinator source. Review and synchronize `fleet-node/fleet/` and the relevant scripts/tests into the existing coordinator checkout first, preserving local changes; otherwise new endpoints will be absent. On a fresh Mac, run the coordinator from this distribution.
+
 The installer validates proxy/native identity matches, backs up replaced configuration, compiles `ranton-router.dylib`, enables that plugin, installs `com.ranton.console`, copies `dist/index.html`, and restarts the existing coordinator and proxy. It does not alter `~/.codex`, SSH, global Git config, shell profiles, Tailscale identity or provider OAuth files. Its output prints backup paths, never credentials.
 
 Verify these before changing private Serve routes:
@@ -39,11 +41,19 @@ After verification, publish only the selected ports with Tailscale Serve. Preser
 
 ## Policy and controls
 
-New independent tasks choose their account automatically. Every reported quota window must retain the reserve, default 10%. You can adjust the reserve to 5–50% and native concurrency to one or two slots in the Routing view. Prioritize useful work; empty queues remain idle. Gateway clients must attach a stable `session_id`; this is separate from native task sessions.
+New independent tasks choose their account automatically. Every reported quota window must retain the reserve, default 10%. You can adjust the reserve to 5–50% and native concurrency to one or two slots in the Routing dialog under Fleet jobs. Prioritize useful work; empty queues remain idle. Gateway clients must attach a stable `session_id`; this is separate from native task sessions.
 
 Pause new work stops new task dispatch, not already running tasks or the gateway. Pause a specific thread to stop its worker while retaining its workspace/session. Explicitly resume interrupted work after a restart. Follow-ups keep the same account and session. Review results before integrating their worktree changes. Never run two coordinators against the same runtime directory; an exclusive lock enforces that rule.
 
 The legacy native `web/` UI is retained as an internal recovery surface; the user-facing control surface is the forked CPAMC Fleet Activity page.
+
+## Codex observation
+
+`GET /v8/management/fleet/codex` and `/codex/chats/<uuid>` use the existing management authentication and bridge allowlist. The coordinator exposes equivalent authenticated `/api/codex` routes. No mutation route is added for app chats.
+
+The local connector opens the owner’s Codex stores read-only, selects metadata and redacted commands, and never repairs/imports local history. It checks canonical IDs, ownership and symlink paths, bounds records, and caches snapshots briefly in memory. Projects come from actual sidebar/database records, matched by exact roots; parent relationships come from stored agent metadata. Working means an unfinished saved turn with a held writer lock. Legacy chats without supported operation history are explicitly unknown. Unsupported local schemas fail visibly without substituting fleet jobs.
+
+This internal schema was inspected against Codex CLI 0.160.0 and needs rechecking on upgrades. Messages, reasoning, prompt previews, command output, tool arguments, auth/account IDs and credentials are excluded. No extra agent process, provider inference, remote-host access or database writes are used to observe Codex. The ordinary app’s inference does not pass through this router merely because its activity is visible.
 
 ## Rollback
 

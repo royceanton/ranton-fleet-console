@@ -31,6 +31,15 @@ class Store:
                 CREATE TABLE IF NOT EXISTS gateway_bindings(scope TEXT PRIMARY KEY,
                     account TEXT NOT NULL, created REAL NOT NULL, touched REAL NOT NULL);
             """)
+            # Additive migrations preserve existing workers, results and bindings.
+            for table, fields in {
+                'projects': ('origin_chat_id', 'origin_chat_title'),
+                'tasks': ('origin_chat_id', 'origin_chat_title', 'parent_task'),
+            }.items():
+                existing = {row['name'] for row in db.execute('PRAGMA table_info(' + table + ')')}
+                for field in fields:
+                    if field not in existing:
+                        db.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + field + ' TEXT')
             for key, value in {"dispatchEnabled": True, "reservePercent": 10, "maxSlots": 2}.items():
                 db.execute("INSERT OR IGNORE INTO settings VALUES(?,?)", (key, json.dumps(value)))
 
@@ -54,14 +63,18 @@ class Store:
         with self.connect() as db:
             return [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY name")]
 
-    def add_project(self, name, path, git, writable):
+    def add_project(self, name, path, git, writable, origin_chat_id=None, origin_chat_title=None):
         with self.connect() as db:
             previous = db.execute("SELECT * FROM projects WHERE path=?", (path,)).fetchone()
             if previous:
                 db.execute("UPDATE projects SET name=?,git=?,writable=? WHERE id=?", (name, git, writable, previous["id"]))
+                if origin_chat_id:
+                    db.execute('UPDATE projects SET origin_chat_id=?,origin_chat_title=? WHERE id=?',
+                               (origin_chat_id, origin_chat_title, previous['id']))
                 return dict(db.execute("SELECT * FROM projects WHERE id=?", (previous["id"],)).fetchone())
             project_id = uuid.uuid4().hex[:12]
-            db.execute("INSERT INTO projects VALUES(?,?,?,?,?,?)", (project_id, name, path, git, writable, time.time()))
+            db.execute("INSERT INTO projects(id,name,path,git,writable,created,origin_chat_id,origin_chat_title) VALUES(?,?,?,?,?,?,?,?)",
+                       (project_id, name, path, git, writable, time.time(), origin_chat_id, origin_chat_title))
             return dict(db.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone())
 
     def observations(self):
@@ -100,10 +113,11 @@ class Store:
                 old = db.execute("SELECT * FROM tasks WHERE idempotency=?", (data["idempotency"],)).fetchone()
                 if old:
                     return dict(old)
-            db.execute("""INSERT INTO tasks(id,title,project,goal,mode,priority,timeout,model,state,created,updated,idempotency)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            db.execute("""INSERT INTO tasks(id,title,project,goal,mode,priority,timeout,model,state,created,updated,idempotency,
+                       origin_chat_id,origin_chat_title,parent_task) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                        (task_id, data["title"], data["project"], data["goal"], data["mode"], data["priority"],
-                        data["timeout"], data.get("model"), "queued", now, now, data.get("idempotency")))
+                        data["timeout"], data.get("model"), "queued", now, now, data.get("idempotency"),
+                        data.get('origin_chat_id'), data.get('origin_chat_title'), data.get('parent_task')))
             db.execute("INSERT INTO events(task,at,kind,message) VALUES(?,?,?,?)", (task_id, now, "queued", "Task submitted; account selection is automatic"))
         return self.task(task_id)
 

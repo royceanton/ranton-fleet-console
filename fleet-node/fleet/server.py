@@ -13,6 +13,7 @@ from pathlib import Path
 import secrets
 import signal
 import stat
+import uuid
 import threading
 import time
 from urllib.parse import urlsplit
@@ -21,11 +22,32 @@ from .router import assess, choose, observed_age
 from .store import Store
 from .worker import ROOT, Worker, git, recover_owned_process, safe_project, sessions
 from .observability import gateway_pick, gateway_event, public_observation, redact
+from .codex_monitor import CodexMonitor
 
 RUNTIME = sessions.accounts.FLEET_ROOT / "runtime"
 WORKSPACES = Path.home() / ".local/share/codex-fleet-workspaces"
 PORT = 8765
 PRIVATE_HOST = "macbook-pro.tail9ad173.ts.net:8443"
+
+
+def chat_origin(data, fallback=None):
+    fallback = fallback or {}
+    identifier = data.get('origin_chat_id') or fallback.get('origin_chat_id')
+    title = data.get('origin_chat_title') or fallback.get('origin_chat_title')
+    if data.get('origin_chat_id') and identifier != fallback.get('origin_chat_id') and not data.get('origin_chat_title'):
+        raise ValueError('Enter a title for the new control chat association')
+    if not identifier:
+        if title:
+            raise ValueError('A control chat ID is required with its title')
+        return None, None
+    try:
+        if not isinstance(identifier, str) or str(uuid.UUID(identifier)) != identifier:
+            raise ValueError()
+    except (ValueError, AttributeError):
+        raise ValueError('Control chat ID must be a canonical UUID') from None
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+        raise ValueError('Enter the control chat title')
+    return identifier, title.strip()
 
 
 def owner_directory(path):
@@ -68,6 +90,7 @@ class Fleet:
         self.pair_code = None
         self.pair_expires = 0
         self.started = time.time()
+        self.codex_monitor = CodexMonitor()
         if not self.store.projects():
             self.store.add_project("Fleet bootstrap", str(ROOT), False, False)
         for task in self.store.tasks():
@@ -214,8 +237,16 @@ class Fleet:
             raise ValueError("Invalid submission key")
         if sum(task["state"] in ("queued", "waiting") for task in self.store.tasks()) >= 100:
             raise ValueError("Queue is full; review existing tasks")
+        parent_id = data.get('parent_task') or None
+        parent = self.store.task(parent_id) if isinstance(parent_id, str) else None
+        if parent_id and (not parent or parent['project'] != project['id']):
+            raise ValueError('The related task must belong to this project')
+        origin_id, origin_title = chat_origin(data, parent or project)
+        if parent and parent.get('origin_chat_id') and origin_id != parent['origin_chat_id']:
+            raise ValueError('A related task must retain its control chat')
         return self.store.submit({"title": title.strip(), "goal": goal.strip(), "project": project["id"],
-                                  "mode": mode, "priority": priority, "timeout": timeout, "model": model, "idempotency": key})
+                                  "mode": mode, "priority": priority, "timeout": timeout, "model": model, "idempotency": key,
+                                  'origin_chat_id': origin_id, 'origin_chat_title': origin_title, 'parent_task': parent_id})
 
     def action(self, task_id, action, data):
         with self.guard:
@@ -334,6 +365,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, self.fleet.status())
         elif path == '/api/observe':
             self.respond(200, public_observation(self.fleet)) if self.authenticated() else self.respond(401, {'error': 'Authentication required'})
+        elif path == '/api/codex' or path.startswith('/api/codex/chats/'):
+            if not self.authenticated():
+                self.respond(401, {'error': 'Authentication required'})
+                return
+            try:
+                payload = self.fleet.codex_monitor.snapshot() if path == '/api/codex' else self.fleet.codex_monitor.detail(path.split('/')[-1])
+                self.respond(200, payload) if payload is not None else self.respond(404, {'error': 'Codex chat not found'})
+            except (ValueError, OSError):
+                self.respond(400, {'error': 'Codex chat is unavailable'})
         elif path.startswith('/api/task/'):
             if not self.authenticated():
                 self.respond(401, {'error': 'Authentication required'})
@@ -382,7 +422,10 @@ class Handler(BaseHTTPRequestHandler):
                     is_git = Path(git(project_path, "rev-parse", "--show-toplevel")).resolve() == project_path
                 except RuntimeError:
                     pass
-                result = self.fleet.store.add_project(name, str(project_path), is_git, is_git and data.get("writable") is True)
+                previous = next((p for p in self.fleet.store.projects() if p['path'] == str(project_path)), None)
+                origin_id, origin_title = chat_origin(data, previous)
+                result = self.fleet.store.add_project(name, str(project_path), is_git, is_git and data.get("writable") is True,
+                                                      origin_id, origin_title)
             elif path == "/api/dispatch":
                 if type(data.get("enabled")) is not bool:
                     raise ValueError("Choose whether dispatch is enabled")
