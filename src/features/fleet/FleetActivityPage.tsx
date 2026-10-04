@@ -750,6 +750,12 @@ export function FleetActivityPage() {
               <p className={styles.routeReason}>{status.nextReason}</p>
               <div className={styles.gatewayStrip}>
                 <span>{t('fleet.gateway')}</span>
+                <span
+                  className={styles.state}
+                  data-state={status.gatewayConfigured ? 'ready' : 'needs_input'}
+                >
+                  {t(status.gatewayConfigured ? 'fleet.gateway_active' : 'fleet.gateway_inactive')}
+                </span>
                 <span>{t('fleet.requests_count', { count: status.gatewayRequests ?? '—' })}</span>
                 <span>{t('fleet.success_count', { count: status.gatewaySuccess ?? '—' })}</span>
                 <span>{t('fleet.failed_count', { count: status.gatewayFailed ?? '—' })}</span>

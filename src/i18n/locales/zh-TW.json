@@ -2359,6 +2359,8 @@
       "rejected": "Rejected",
       "in_progress": "Running"
     },
-    "http_status": "HTTP {{code}}"
+    "http_status": "HTTP {{code}}",
+    "gateway_active": "Quota-aware gateway routing active",
+    "gateway_inactive": "Fleet gateway extension unavailable; native task routing is separate"
   }
 }
