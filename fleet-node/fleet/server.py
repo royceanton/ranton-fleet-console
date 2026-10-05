@@ -232,6 +232,10 @@ class Fleet:
         model = data.get("model") or None
         if model is not None and (not isinstance(model, str) or len(model) > 100):
             raise ValueError("Invalid model")
+        requested_account = data.get('requested_account')
+        if requested_account is not None and (not isinstance(requested_account, str)
+                                              or requested_account not in sessions.accounts.ALIASES):
+            raise ValueError('Requested account must be harith or jill; omit it for automatic routing')
         key = data.get("idempotency")
         if key is not None and (not isinstance(key, str) or len(key) > 100):
             raise ValueError("Invalid submission key")
@@ -246,7 +250,8 @@ class Fleet:
             raise ValueError('A related task must retain its control chat')
         return self.store.submit({"title": title.strip(), "goal": goal.strip(), "project": project["id"],
                                   "mode": mode, "priority": priority, "timeout": timeout, "model": model, "idempotency": key,
-                                  'origin_chat_id': origin_id, 'origin_chat_title': origin_title, 'parent_task': parent_id})
+                                  'origin_chat_id': origin_id, 'origin_chat_title': origin_title, 'parent_task': parent_id,
+                                  'requested_account': requested_account})
 
     def action(self, task_id, action, data):
         with self.guard:

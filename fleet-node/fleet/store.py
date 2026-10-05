@@ -34,7 +34,7 @@ class Store:
             # Additive migrations preserve existing workers, results and bindings.
             for table, fields in {
                 'projects': ('origin_chat_id', 'origin_chat_title'),
-                'tasks': ('origin_chat_id', 'origin_chat_title', 'parent_task'),
+                'tasks': ('origin_chat_id', 'origin_chat_title', 'parent_task', 'requested_account'),
             }.items():
                 existing = {row['name'] for row in db.execute('PRAGMA table_info(' + table + ')')}
                 for field in fields:
@@ -114,11 +114,14 @@ class Store:
                 if old:
                     return dict(old)
             db.execute("""INSERT INTO tasks(id,title,project,goal,mode,priority,timeout,model,state,created,updated,idempotency,
-                       origin_chat_id,origin_chat_title,parent_task) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       origin_chat_id,origin_chat_title,parent_task,requested_account) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                        (task_id, data["title"], data["project"], data["goal"], data["mode"], data["priority"],
                         data["timeout"], data.get("model"), "queued", now, now, data.get("idempotency"),
-                        data.get('origin_chat_id'), data.get('origin_chat_title'), data.get('parent_task')))
-            db.execute("INSERT INTO events(task,at,kind,message) VALUES(?,?,?,?)", (task_id, now, "queued", "Task submitted; account selection is automatic"))
+                        data.get('origin_chat_id'), data.get('origin_chat_title'), data.get('parent_task'),
+                        data.get('requested_account')))
+            message = ("Task submitted for " + data['requested_account'].title() + "; eligibility checks still apply"
+                       if data.get('requested_account') else "Task submitted; account selection is automatic")
+            db.execute("INSERT INTO events(task,at,kind,message) VALUES(?,?,?,?)", (task_id, now, "queued", message))
         return self.task(task_id)
 
     def update(self, task_id, **values):
@@ -134,8 +137,10 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             if db.execute("SELECT COUNT(*) FROM tasks WHERE state='running' AND account=?", (alias,)).fetchone()[0]:
                 return False
-            changed = db.execute("UPDATE tasks SET state='running',account=?,route=?,error=NULL,updated=? WHERE id=? AND state IN ('queued','waiting')",
-                                 (alias, reason, time.time(), task_id)).rowcount
+            changed = db.execute("""UPDATE tasks SET state='running',account=?,route=?,error=NULL,updated=?
+                WHERE id=? AND state IN ('queued','waiting') AND
+                (account=? OR (account IS NULL AND (requested_account IS NULL OR requested_account=?)))""",
+                (alias, reason, time.time(), task_id, alias, alias)).rowcount
             return bool(changed)
 
     def event(self, task_id, kind, message):

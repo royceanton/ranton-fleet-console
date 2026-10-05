@@ -69,6 +69,11 @@ def choose(accounts, task, active, now, reserve=10):
         if any(alias == binding for _, alias in candidates):
             return binding, "Keep the existing account and session for context continuity"
         return None, "Waiting for the bound account: " + reasons.get(binding, "Unavailable")
+    requested = task.get("requested_account")
+    if requested:
+        if any(alias == requested for _, alias in candidates):
+            return requested, "Requested account; quota, model and interactive headroom checks passed"
+        return None, "Waiting for the requested account: " + reasons.get(requested, "Unavailable")
     if not candidates:
         return None, " · ".join(alias.title() + ": " + reason for alias, reason in reasons.items())
     candidates.sort()

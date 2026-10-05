@@ -43,6 +43,15 @@ After verification, publish only the selected ports with Tailscale Serve. Preser
 
 New independent tasks choose their account automatically. Every reported quota window must retain the reserve, default 10%. You can adjust the reserve to 5–50% and native concurrency to one or two slots in the Routing dialog under Fleet jobs. Prioritize useful work; empty queues remain idle. Gateway clients must attach a stable `session_id`; this is separate from native task sessions.
 
+From a native Codex control chat signed into Harith, a host agent can submit a separate worker using Jill's ChatGPT subscription:
+
+```sh
+python3 scripts/42_fleet.py submit PROJECT_ID 'Jill read-only test' --account jill --goal-file /absolute/goal.txt
+python3 scripts/42_fleet.py task TASK_ID
+```
+
+The optional `--account` constraint is serialized as `requested_account` on the authenticated task API. It waits if the requested account fails quota, model, freshness or occupancy checks, rather than using the other account. Existing task/session bindings take precedence during continuation. Omit the option for normal automatic routing. The original control chat still uses its signed-in subscription; only the delegated worker uses the requested profile. Worker account, native session and provider-reported usage supply the execution evidence. The job appears under **Fleet activity → Fleet jobs**, with its control-chat association, without changing the app login or consuming reset credits.
+
 Pause new work stops new task dispatch, not already running tasks or the gateway. Pause a specific thread to stop its worker while retaining its workspace/session. Explicitly resume interrupted work after a restart. Follow-ups keep the same account and session. Review results before integrating their worktree changes. Never run two coordinators against the same runtime directory; an exclusive lock enforces that rule.
 
 The legacy native `web/` UI is retained as an internal recovery surface; the user-facing control surface is the forked CPAMC Fleet Activity page.

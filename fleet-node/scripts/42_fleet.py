@@ -50,6 +50,7 @@ def main():
     task.add_argument("--timeout", type=int, default=1200)
     task.add_argument("--idempotency")
     task.add_argument("--model")
+    task.add_argument('--account', choices=('harith', 'jill'), help='Request one account; default is automatic. Eligibility checks still apply.')
     task.add_argument('--chat-title', help='Title of the current Codex control chat; defaults to project association')
     task.add_argument('--parent-task', help='Related task in the same project; does not share its worker session')
     inspect = commands.add_parser("task")
@@ -75,8 +76,8 @@ def main():
         origin = {'origin_chat_id': os.environ.get('CODEX_THREAD_ID'), 'origin_chat_title': args.chat_title} if args.chat_title else {}
         result = request("/api/tasks", {"project": args.project, "title": args.title, "goal": goal, "mode": args.mode,
                                        "priority": args.priority, "timeout": args.timeout, "idempotency": args.idempotency, "model": args.model,
-                                       'parent_task': args.parent_task, **origin})
-        result = {key: result[key] for key in ("id", "title", "state")}
+                                       'parent_task': args.parent_task, 'requested_account': args.account, **origin})
+        result = {key: result[key] for key in ("id", "title", "state", "requested_account")}
     elif args.command == "task":
         result = next((t for t in request("/api/status")["tasks"] if t["id"] == args.id), None)
         if result is None:

@@ -48,6 +48,21 @@ class RouterTests(unittest.TestCase):
         for sample in accounts.values(): sample["quotaWindows"][0]["primary"]["remainingPercent"]=10
         self.assertIsNone(choose(accounts, {}, {}, NOW)[0])
 
+    def test_requested_account_never_falls_back_or_overrides_session_affinity(self):
+        accounts = {'harith': observation('harith'), 'jill': observation('jill', NOW + 7200)}
+        task = {'requested_account': 'jill'}
+        self.assertEqual(choose(accounts, task, {}, NOW)[0], 'jill')
+        self.assertIsNone(choose(accounts, task, {'jill': 1}, NOW)[0])
+        self.assertIsNone(choose(accounts, {**task, 'model': 'unavailable'}, {}, NOW)[0])
+        accounts['jill']['quotaWindows'][0]['primary']['remainingPercent'] = 10
+        self.assertIsNone(choose(accounts, task, {}, NOW)[0])
+        self.assertEqual(choose(accounts, {}, {}, NOW)[0], 'harith')
+        self.assertEqual(choose(accounts, {**task, 'account': 'harith'}, {}, NOW)[0], 'harith')
+        self.assertIsNone(choose(accounts, {'requested_account': 'missing'}, {}, NOW)[0])
+        accounts['jill'] = observation('jill', NOW + 7200)
+        accounts['jill']['observedAt'] = datetime.fromtimestamp(NOW - 301, timezone.utc).isoformat()
+        self.assertIsNone(choose(accounts, task, {}, NOW)[0])
+
 
 class DurableTests(unittest.TestCase):
     def setUp(self):
@@ -74,6 +89,19 @@ class DurableTests(unittest.TestCase):
         self.store.observe("harith",{"authentication":"signed-out"})
         self.store.observe("harith",observation("different"))
         self.assertEqual(self.store.observations()["harith"]["authentication"],"identity-changed")
+
+    def test_requested_account_persists_and_wrong_account_cannot_claim(self):
+        task = self.store.submit({'title': 'Jill test', 'goal': 'Read project', 'project': self.project['id'],
+                                 'mode': 'read-only', 'priority': 10, 'timeout': 60, 'requested_account': 'jill'})
+        restored = Store(self.path / 'test.sqlite3')
+        self.assertEqual(restored.task(task['id'])['requested_account'], 'jill')
+        self.assertIsNone(restored.task(task['id'])['account'])
+        self.assertFalse(restored.claim(task['id'], 'harith', 'wrong account'))
+        self.assertTrue(restored.claim(task['id'], 'jill', 'requested'))
+        restored.update(task['id'], state='queued', session='saved-session')
+        self.assertFalse(restored.claim(task['id'], 'harith', 'wrong continuation'))
+        self.assertTrue(restored.claim(task['id'], 'jill', 'continuation'))
+        self.assertEqual(restored.task(task['id'])['session'], 'saved-session')
 
     def test_git_worktree_preserves_dirty_source_and_hooks(self):
         repo=self.path/"repo";repo.mkdir();spaces=self.path/"worktrees";spaces.mkdir()
@@ -191,6 +219,23 @@ class ServerTests(unittest.TestCase):
         task = self.fleet.submit({'project': project['id'], 'title': 'Standalone', 'goal': 'Read'})
         self.assertIsNone(task['origin_chat_id'])
         self.assertIsNone(task['parent_task'])
+
+    def test_requested_account_validation_default_and_idempotency(self):
+        project = self.fleet.store.projects()[0]
+        bearer = {'Authorization': 'Bearer ' + self.fleet.key}
+        data = {'project': project['id'], 'title': 'Jill test', 'goal': 'Inspect project',
+                'requested_account': 'jill', 'idempotency': 'jill-proof'}
+        status, task, _ = self.call('/api/tasks', data, bearer)
+        self.assertEqual(status, 200)
+        self.assertEqual(task['requested_account'], 'jill')
+        self.assertIsNone(task['account'])
+        self.assertEqual(self.call('/api/tasks', {**data, 'requested_account': 'harith'}, bearer)[1]['id'], task['id'])
+        self.assertEqual(self.fleet.store.task(task['id'])['requested_account'], 'jill')
+        for invalid in ('', 'unknown', 'Jill', False, 0, [], {}):
+            self.assertEqual(self.call('/api/tasks', {**data, 'requested_account': invalid}, bearer)[0], 400)
+        automatic = self.fleet.submit({'project': project['id'], 'title': 'Automatic', 'goal': 'Read docs'})
+        self.assertIsNone(automatic['requested_account'])
+        self.assertIsNone(automatic['account'])
 
 
 if __name__=="__main__":unittest.main()
