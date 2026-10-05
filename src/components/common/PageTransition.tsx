@@ -92,6 +92,7 @@ export function PageTransition({
   const currentLayer =
     layers.find((layer) => layer.status === 'current') ?? layers[layers.length - 1];
   const currentLayerKey = currentLayer?.key ?? location.key;
+  const currentLocationKey = currentLayer?.location.key;
   const currentLayerPathname = currentLayer?.location.pathname;
 
   const resolveScrollContainer = useCallback(() => {
@@ -102,8 +103,15 @@ export function PageTransition({
 
   useLayoutEffect(() => {
     if (isAnimating) return;
-    if (location.key === currentLayerKey) return;
-    if (currentLayerPathname === location.pathname) return;
+    if (location.key === currentLocationKey) return;
+    if (currentLayerPathname === location.pathname) {
+      // Query navigation updates the route context without remounting the page
+      // or moving keyboard focus on each search keystroke.
+      setLayers((prev) =>
+        prev.map((layer) => (layer.status === 'current' ? { ...layer, location } : layer))
+      );
+      return;
+    }
     const scrollContainer = resolveScrollContainer();
     const exitScrollOffset = scrollContainer?.scrollTop ?? 0;
     exitScrollOffsetRef.current = exitScrollOffset;
@@ -214,6 +222,7 @@ export function PageTransition({
     isAnimating,
     location,
     currentLayerKey,
+    currentLocationKey,
     currentLayerPathname,
     getRouteOrder,
     getTransitionVariant,

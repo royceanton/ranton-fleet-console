@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ranton fleet</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="wordmark" href="/">ranton <span>fleet</span></a><span id="connection" class="connection">Connecting</span></header>
+  <section id="login" class="login" hidden>
+    <p class="eyebrow">Your private control room</p><h1>One place for the work.</h1>
+    <p>Sign in with your local access key, or a device code from an already connected dashboard.</p>
+    <form id="login-form"><label for="access-key">Access key or device code</label><input id="access-key" type="password" autocomplete="current-password" required maxlength="200"><button class="primary">Connect to fleet</button></form>
+    <p class="muted">The access key is stored on the coordinator Mac. Codex can connect using the fleet helper.</p>
+  </section>
+  <main id="dashboard" hidden>
+    <div class="page-heading"><div><p class="eyebrow">24 GB Mac · private fleet</p><h1>The work, in view.</h1><p id="overview-line" class="muted">Reading account capacity and the task queue.</p></div><div class="heading-actions"><button id="refresh">Refresh quotas</button><button id="new-task" class="primary">+ New task</button></div></div>
+    <div id="feedback" role="status" aria-live="polite"></div>
+    <section class="overview" aria-label="Account capacity and task routing">
+      <div class="capacity"><div class="section-heading"><h2>Account capacity</h2><span class="muted">Observed, not estimated</span></div><div id="accounts"></div><p id="quota-note" class="fineprint"></p></div>
+      <div class="routing"><div class="section-heading"><h2>Automatic route</h2><span id="slots" class="muted"></span></div>
+        <div class="route-map" aria-label="Tasks are queued, assigned to a Codex account on this Mac, then returned for review">
+          <div class="route-node"><span class="node-caption">Work waiting</span><strong id="queue-count">0</strong><span>tasks</span></div><span class="route-arrow" aria-hidden="true">→</span>
+          <div class="route-node worker-node"><span class="node-caption">Next available lane</span><strong id="route-account">Reading</strong><span id="route-state">Native Codex · 24 GB Mac</span></div><span class="route-arrow" aria-hidden="true">→</span>
+          <div class="route-node"><span class="node-caption">For your attention</span><strong id="attention-count">0</strong><span>results or decisions</span></div>
+        </div><p id="route-reason" class="route-reason"></p><div class="dispatch-controls"><span id="dispatch-label">Automatic dispatch</span><button id="dispatch-toggle">Pause new work</button></div>
+      </div>
+    </section>
+    <section id="task-composer" class="composer" hidden>
+      <div class="section-heading"><h2>Give the fleet a task</h2><button id="close-composer" class="quiet">Close</button></div>
+      <form id="task-form"><div class="form-grid"><label>Project<select id="task-project" required></select></label><label>Task title<input id="task-title" maxlength="120" placeholder="A clear outcome for this project" required></label></div>
+        <label>What should be done?<textarea id="task-goal" rows="4" maxlength="16000" placeholder="Describe the goal, constraints and how you will judge the result." required></textarea></label>
+        <div class="form-grid three"><label>Permissions<select id="task-mode"><option value="code">Edit an isolated Git worktree</option><option value="read-only">Read-only analysis</option></select></label><label>Priority<select id="task-priority"><option value="10">Normal</option><option value="20">High</option><option value="0">Low</option></select></label><label>Time bound<select id="task-timeout"><option value="1200">20 minutes</option><option value="600">10 minutes</option><option value="3600">60 minutes</option></select></label></div>
+        <div class="form-footer"><span class="muted">Account and model are chosen automatically. Results come back for review.</span><button class="primary">Queue task</button></div>
+      </form>
+    </section>
+    <div class="work-layout"><section class="work-board" aria-label="Tasks">
+      <div class="section-heading"><h2>Work board</h2><span class="muted">Attention comes first</span></div>
+      <div class="board"><section class="lane attention-lane"><h3>Review &amp; decisions <span id="attention-total">0</span></h3><div id="attention-tasks" class="task-list"></div></section><section class="lane"><h3>Queued <span id="queued-total">0</span></h3><div id="queued-tasks" class="task-list"></div></section><section class="lane"><h3>Running <span id="running-total">0</span></h3><div id="running-tasks" class="task-list"></div></section></div>
+      <details class="history"><summary id="history-title">Completed &amp; paused</summary><div id="history-tasks" class="task-list"></div></details>
+    </section><aside id="task-detail" class="task-detail" aria-label="Selected task"><p class="eyebrow">Task detail</p><h2>Follow the work.</h2><p class="muted">Select a task to see its account, workspace, progress and result. Follow-ups reuse the same account and session.</p></aside></div>
+    <div class="lower-grid"><section class="projects"><div class="section-heading"><h2>Projects</h2><span class="muted">Registered on this Mac</span></div><div id="project-list"></div><details><summary>Register a project</summary><form id="project-form"><label>Folder path<input id="project-path" placeholder="/Users/…/your-project" required></label><label class="checkbox"><input id="project-write" type="checkbox" checked> Allow isolated code edits for Git repositories</label><button>Register project</button></form></details></section>
+    <section class="activity"><div class="section-heading"><h2>Recent activity</h2><button id="pair-device" class="quiet">Connect another device</button></div><div id="pairing" hidden></div><ol id="activity-list"></ol></section></div>
+    <footer>Native Codex subscriptions · two bounded work slots · no automatic merge, push or extra billing.<span>Host must remain awake and online.</span></footer>
+  </main>
+  <div id="login-feedback" class="login-feedback" role="alert"></div>
+</body></html>

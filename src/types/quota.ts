@@ -241,6 +241,8 @@ export interface CodexQuotaWindow {
 
 export interface CodexQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
+  /** Primary quota observation time; optional subscription metadata does not renew it. */
+  observedAtMs?: number;
   windows: CodexQuotaWindow[];
   planType?: string | null;
   subscriptionActiveUntil?: string | number | null;

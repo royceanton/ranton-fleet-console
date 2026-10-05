@@ -641,6 +641,12 @@ export function MainLayout() {
       labelKey: 'nav_groups.observe',
       items: [
         {
+          path: '/fleet',
+          labelKey: 'nav.fleet_activity',
+          metaKey: 'nav_meta.fleet_activity',
+          icon: sidebarIcons.dashboard,
+        },
+        {
           path: '/quota',
           labelKey: 'nav.quota_management',
           metaKey: 'nav_meta.quota_management',

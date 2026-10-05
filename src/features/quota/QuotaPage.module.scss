@@ -51,7 +51,7 @@
   align-items: center;
   flex: 0 1 340px;
   min-width: 0;
-  height: 36px;
+  height: 44px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: var(--bg-secondary);
@@ -100,8 +100,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -125,7 +125,7 @@
   max-width: 100%;
 
   button[aria-haspopup='listbox'] {
-    height: 36px;
+    height: 44px;
     border-color: transparent;
     border-radius: 10px;
     background: transparent;
@@ -138,6 +138,39 @@
       outline-offset: 2px;
       background: var(--bg-secondary);
       color: var(--text-primary);
+    }
+  }
+}
+
+.viewControls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.viewToggle {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  button {
+    padding: 0 14px;
+    min-height: 44px;
+    font: inherit;
+    font-size: 13px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    &[aria-pressed='true'],
+    &:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 3px;
     }
   }
 }
@@ -159,16 +192,16 @@
 @include mobile {
   .search {
     flex: 1 1 220px;
-    height: 40px;
+    height: 44px;
   }
 
   .clearSearch {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
   }
 
   .sort button[aria-haspopup='listbox'] {
-    height: 40px;
+    height: 44px;
   }
 }
 

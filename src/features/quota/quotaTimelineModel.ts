@@ -12,6 +12,8 @@
 
 import { DAY_MS, HOUR_MS } from '@/utils/time/durations';
 import type { QuotaProviderType } from './providers/types';
+import type { CodexQuotaState } from '@/types';
+import { hasCodexObservation } from './codexLedgerModel';
 
 export { DAY_MS, HOUR_MS };
 
@@ -355,7 +357,9 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     resetCredits: [],
   };
 
-  if (!quota || quota.status !== 'success') return empty;
+  const retained =
+    provider === 'codex' && hasCodexObservation(quota as CodexQuotaState | undefined);
+  if (!quota || (quota.status !== 'success' && !retained)) return empty;
 
   if (provider === 'claude' || provider === 'codex') {
     const windows = ((quota as { windows?: WindowLike[] }).windows ?? []).filter(

@@ -1,3 +1,5 @@
+> **Ranton fleet fork:** See [Fleet Activity documentation](RANTON_FLEET.md) for the Observe section, intelligent routing, native worker backend, installation and limits. Upstream management features remain available.
+
 <div align="center">
 
 <img src="./logo.jpg" alt="CLI Proxy API" width="144">
